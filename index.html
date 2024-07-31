@@ -316,7 +316,7 @@ function draw() {
     ctx.shadowBlur = 20;
     ctx.shadowColor = neonBlue;
     ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 100);
-    ctx.font = '40px Arial';
+    ctx.font = '80px Arial';
     ctx.fillText(HumanScore > cpuScore ? 'Human Wins!' : 'CPU Wins!', canvas.width / 2, canvas.height / 2);
     ctx.font = '30px Arial';
     ctx.fillText(`Final Score: ${HumanScore} - ${cpuScore}`, canvas.width / 2, canvas.height / 2 + 50);
