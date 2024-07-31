@@ -1,0 +1,440 @@
+<!DOCTYPE html><html><head><base href="https://pong.example.com/">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classic Pong Game</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #000;
+    font-family: Arial, sans-serif;
+  }
+  #gameCanvas {
+    border: 2px solid #00ffff;
+    box-shadow: 0 0 20px #00ffff;
+  }
+  #score {
+    position: absolute;
+    top: 10px;
+    color: #00ffff;
+    font-size: 24px;
+    text-shadow: 0 0 10px #00ffff;
+  }
+</style>
+</head>
+<body>
+<div id="score">Player: 0 | CPU: 0</div>
+<canvas id="gameCanvas" width="1000" height="600"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+
+const paddleWidth = 12;
+const paddleHeight = 150;
+const ballSize = 20;
+
+let playerY = canvas.height / 2 - paddleHeight / 2;
+let cpuY = canvas.height / 2 - paddleHeight / 2;
+let ballX = canvas.width / 2;
+let ballY = canvas.height / 2;
+let ballSpeedX = 6;
+let ballSpeedY = 6;
+
+let playerScore = 0;
+let cpuScore = 0;
+let gameStartTime;
+let maxScore = 5;
+
+const neonBlue = '#00ffff';
+
+// Sound effects
+const wallHitSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-quick-jump-arcade-game-239.mp3');
+const scoreSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-complete-or-approved-mission-205.mp3');
+const gameOverSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-player-losing-or-failing-2042.mp3');
+const gameStartSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3');
+const crowdCheerSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-crowd-loud-cheer-393.mp3');
+const ballHitSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-mechanical-bling-210.mp3');
+const pointScoredSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3');
+const ballWhooshSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arrow-whoosh-1491.mp3');
+const ballBounceHighSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3');
+const ballBounceMidSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3');
+const ballBounceLowSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-plastic-bubble-click-1124.mp3');
+const menuSelectSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-select-click-1109.mp3');
+const beepSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3');
+const cpuScoreSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-video-game-mystery-alert-234.mp3');
+
+function playSound(sound) {
+  sound.currentTime = 0;
+  sound.play().catch(e => console.error("Error playing sound:", e));
+}
+
+// Game state
+let gameState = 'start';
+
+// Paddle glow effect variables
+let playerPaddleGlow = 0;
+let cpuPaddleGlow = 0;
+const maxGlowIntensity = 30;
+const glowDecayRate = 0.5;
+
+// Motion blur
+let lastBallX = ballX;
+let lastBallY = ballY;
+const blurAmount = 0.7;
+
+function drawRect(x, y, width, height, color, fill = true, glowIntensity = 0) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = glowIntensity;
+  ctx.shadowColor = color;
+  
+  if (fill) {
+    ctx.fillRect(x, y, width, height);
+  } else {
+    ctx.strokeRect(x, y, width, height);
+  }
+  
+  ctx.shadowBlur = 0;
+}
+
+function drawCircle(x, y, radius, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+  ctx.fill();
+}
+
+function drawMotionBlur(startX, startY, endX, endY, radius, color) {
+  const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
+  gradient.addColorStop(0, 'rgba(0, 255, 255, 0)');
+  gradient.addColorStop(1, 'rgba(0, 255, 255, 0.3)');
+
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = radius * 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+}
+
+// Explosion effect
+const explosions = [];
+
+function createExplosion(x, y) {
+  explosions.push({ x, y, radius: 0, maxRadius: 50, alpha: 1 });
+}
+
+function updateExplosions() {
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    const explosion = explosions[i];
+    explosion.radius += 2;
+    explosion.alpha -= 0.02;
+
+    if (explosion.alpha <= 0) {
+      explosions.splice(i, 1);
+    } else {
+      ctx.beginPath();
+      ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(0, 255, 255, ${explosion.alpha})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+}
+
+function updateScore() {
+  scoreEl.textContent = `Player: ${playerScore} | CPU: ${cpuScore}`;
+}
+
+function resetBall() {
+  ballX = canvas.width / 2;
+  ballY = canvas.height / 2;
+  ballSpeedX = 6 * (Math.random() > 0.5 ? 1 : -1);
+  ballSpeedY = 6 * (Math.random() > 0.5 ? 1 : -1);
+  lastBallX = ballX;
+  lastBallY = ballY;
+}
+
+function update() {
+  if (gameState !== 'playing') return;
+
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    playerY = e.clientY - rect.top - paddleHeight / 2;
+  });
+
+  const cpuSpeed = 4;
+  const cpuCenter = cpuY + paddleHeight / 2;
+  if (cpuCenter < ballY - 40) {
+    cpuY += cpuSpeed;
+  } else if (cpuCenter > ballY + 40) {
+    cpuY -= cpuSpeed;
+  }
+
+  lastBallX = ballX;
+  lastBallY = ballY;
+
+  ballX += ballSpeedX;
+  ballY += ballSpeedY;
+
+  if (Math.abs(ballSpeedX) > 8 || Math.abs(ballSpeedY) > 8) {
+    playSound(ballWhooshSound);
+  }
+
+  if (ballY < ballSize / 2 || ballY > canvas.height - ballSize / 2) {
+    ballSpeedY = -ballSpeedY;
+    playSound(wallHitSound);
+    createExplosion(ballX, ballY);
+
+    if (ballY < canvas.height / 3) {
+      playSound(ballBounceHighSound);
+    } else if (ballY < 2 * canvas.height / 3) {
+      playSound(ballBounceMidSound);
+    } else {
+      playSound(ballBounceLowSound);
+    }
+  }
+
+  if (
+    (ballX < paddleWidth + ballSize / 2 && ballY > playerY && ballY < playerY + paddleHeight) ||
+    (ballX > canvas.width - paddleWidth - ballSize / 2 && ballY > cpuY && ballY < cpuY + paddleHeight)
+  ) {
+    ballSpeedX = -ballSpeedX;
+    const deltaY = ballY - (ballX < paddleWidth ? playerY : cpuY);
+    ballSpeedY = deltaY * 0.3;
+    createExplosion(ballX, ballY);
+
+    if (ballX < paddleWidth + ballSize / 2) {
+      playerPaddleGlow = maxGlowIntensity;
+      createExplosion(paddleWidth, ballY);
+    } else {
+      cpuPaddleGlow = maxGlowIntensity;
+      createExplosion(canvas.width - paddleWidth, ballY);
+    }
+
+    const hitPosition = (ballY - (ballX < paddleWidth ? playerY : cpuY)) / paddleHeight;
+    if (hitPosition < 0.33) {
+      playSound(ballBounceLowSound);
+    } else if (hitPosition < 0.66) {
+      playSound(ballBounceMidSound);
+    } else {
+      playSound(ballBounceHighSound);
+    }
+
+    playSound(crowdCheerSound);
+    playSound(beepSound);
+  }
+
+  if (ballX < 0) {
+    cpuScore++;
+    resetBall();
+    playSound(cpuScoreSound);
+    createExplosion(0, ballY);
+  } else if (ballX > canvas.width) {
+    playerScore++;
+    resetBall();
+    playSound(scoreSound);
+    playSound(pointScoredSound);
+    createExplosion(canvas.width, ballY);
+    playSound(crowdCheerSound);
+  }
+
+  if (Math.abs(ballSpeedX) !== Math.abs(ballSpeedY)) {
+    playSound(ballHitSound);
+  }
+
+  updateScore();
+
+  if (playerScore >= maxScore || cpuScore >= maxScore) {
+    gameState = 'gameover';
+    playSound(gameOverSound);
+  }
+
+  playerPaddleGlow = Math.max(0, playerPaddleGlow - glowDecayRate);
+  cpuPaddleGlow = Math.max(0, cpuPaddleGlow - glowDecayRate);
+}
+
+function draw() {
+  ctx.fillStyle = 'rgba(0, 0, 0, ' + blurAmount + ')';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (gameState === 'start') {
+    ctx.fillStyle = neonBlue;
+    ctx.font = '100px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = neonBlue;
+    ctx.fillText('PONG', canvas.width / 2, canvas.height / 2 - 50);
+    ctx.font = '30px Arial';
+    ctx.fillText('Click to Start', canvas.width / 2, canvas.height / 2 + 80);
+    ctx.shadowBlur = 0;
+
+    const time = Date.now() * 0.001;
+    const paddleY = canvas.height / 2 + Math.sin(time * 2) * 50;
+    const ballX = canvas.width / 2 + Math.cos(time * 3) * 100;
+    const ballY = canvas.height / 2 + Math.sin(time * 4) * 50;
+
+    drawRect(20, paddleY - paddleHeight / 2, paddleWidth, paddleHeight, neonBlue, false, 10);
+    drawRect(canvas.width - 20 - paddleWidth, paddleY - paddleHeight / 2, paddleWidth, paddleHeight, neonBlue, false, 10);
+    drawCircle(ballX, ballY, ballSize / 2, neonBlue);
+
+    ctx.strokeStyle = neonBlue;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const t = time - i * 0.1;
+      const x = canvas.width / 2 + Math.cos(t * 3) * 100;
+      const y = canvas.height / 2 + Math.sin(t * 4) * 50;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  } else if (gameState === 'paused') {
+    ctx.fillStyle = neonBlue;
+    ctx.font = '60px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = neonBlue;
+    ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+    ctx.font = '30px Arial';
+    ctx.fillText('Press ENTER or SPACE to resume', canvas.width / 2, canvas.height / 2 + 60);
+    ctx.shadowBlur = 0;
+  } else if (gameState === 'gameover') {
+    ctx.fillStyle = neonBlue;
+    ctx.font = '80px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = neonBlue;
+    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 100);
+    ctx.font = '40px Arial';
+    ctx.fillText(playerScore > cpuScore ? 'Player Wins!' : 'CPU Wins!', canvas.width / 2, canvas.height / 2);
+    ctx.font = '30px Arial';
+    ctx.fillText(`Final Score: ${playerScore} - ${cpuScore}`, canvas.width / 2, canvas.height / 2 + 50);
+    ctx.shadowBlur = 0;
+
+    const buttonWidth = 200;
+    const buttonHeight = 60;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    const buttonY = canvas.height / 2 + 120;
+    
+    const mouseX = canvas.mouseX;
+    const mouseY = canvas.mouseY;
+    const isHovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                      mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+
+    if (isHovered) {
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = neonBlue;
+      drawRect(buttonX, buttonY, buttonWidth, buttonHeight, neonBlue, true);
+      ctx.fillStyle = '#000';
+    } else {
+      drawRect(buttonX, buttonY, buttonWidth, buttonHeight, neonBlue, false);
+      ctx.fillStyle = neonBlue;
+    }
+
+    ctx.font = '24px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('RETRY', canvas.width / 2, buttonY + buttonHeight / 2);
+    ctx.shadowBlur = 0;
+
+    canvas.style.cursor = isHovered ? 'pointer' : 'default';
+  } else {
+    drawRect(0, playerY, paddleWidth, paddleHeight, neonBlue, false, playerPaddleGlow);
+    drawRect(canvas.width - paddleWidth, cpuY, paddleWidth, paddleHeight, neonBlue, false, cpuPaddleGlow);
+
+    drawMotionBlur(lastBallX, lastBallY, ballX, ballY, ballSize / 2, neonBlue);
+
+    drawCircle(ballX, ballY, ballSize / 2, neonBlue);
+
+    for (let i = 0; i < canvas.height; i += 40) {
+      drawRect(canvas.width / 2 - 1, i, 2, 20, neonBlue, false);
+    }
+  }
+
+  ctx.strokeStyle = neonBlue;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+  updateExplosions();
+}
+
+function resetGame() {
+  playerScore = 0;
+  cpuScore = 0;
+  maxScore = 5;
+  resetBall();
+  gameState = 'playing';
+  gameStartTime = Date.now();
+  playerPaddleGlow = 0;
+  cpuPaddleGlow = 0;
+}
+
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+canvas.addEventListener('click', (e) => {
+  if (gameState === 'start') {
+    gameState = 'playing';
+    resetGame();
+    playSound(gameStartSound);
+  } else if (gameState === 'gameover') {
+    const buttonWidth = 200;
+    const buttonHeight = 60;
+    const buttonX = canvas.width / 2 - buttonWidth / 2;
+    const buttonY = canvas.height / 2 + 120;
+    
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    if (
+      clickX >= buttonX &&
+      clickX <= buttonX + buttonWidth &&
+      clickY >= buttonY &&
+      clickY <= buttonY + buttonHeight
+    ) {
+      resetGame();
+      playSound(menuSelectSound);
+    }
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    if (gameState === 'playing') {
+      gameState = 'paused';
+      playSound(menuSelectSound);
+    } else if (gameState === 'paused') {
+      gameState = 'playing';
+      playSound(menuSelectSound);
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  canvas.mouseX = e.clientX - rect.left;
+  canvas.mouseY = e.clientY - rect.top;
+});
+
+gameLoop();
+
+gameState = 'start';
+playSound(gameStartSound);
+</script>
+
+</body></html>
