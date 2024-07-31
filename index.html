@@ -39,14 +39,14 @@ const paddleWidth = 12;
 const paddleHeight = 150;
 const ballSize = 20;
 
-let playerY = canvas.height / 2 - paddleHeight / 2;
+let HumanY = canvas.height / 2 - paddleHeight / 2;
 let cpuY = canvas.height / 2 - paddleHeight / 2;
 let ballX = canvas.width / 2;
 let ballY = canvas.height / 2;
 let ballSpeedX = 6;
 let ballSpeedY = 6;
 
-let playerScore = 0;
+let HumanScore = 0;
 let cpuScore = 0;
 let gameStartTime;
 let maxScore = 5;
@@ -56,7 +56,7 @@ const neonBlue = '#00ffff';
 // Sound effects
 const wallHitSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-quick-jump-arcade-game-239.mp3');
 const scoreSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-complete-or-approved-mission-205.mp3');
-const gameOverSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-player-losing-or-failing-2042.mp3');
+const gameOverSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-Human-losing-or-failing-2042.mp3');
 const gameStartSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-unlock-game-notification-253.mp3');
 const crowdCheerSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-crowd-loud-cheer-393.mp3');
 const ballHitSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-mechanical-bling-210.mp3');
@@ -78,7 +78,7 @@ function playSound(sound) {
 let gameState = 'start';
 
 // Paddle glow effect variables
-let playerPaddleGlow = 0;
+let HumanPaddleGlow = 0;
 let cpuPaddleGlow = 0;
 const maxGlowIntensity = 30;
 const glowDecayRate = 0.5;
@@ -151,7 +151,7 @@ function updateExplosions() {
 }
 
 function updateScore() {
-  scoreEl.textContent = `Player: ${playerScore} | CPU: ${cpuScore}`;
+  scoreEl.textContent = `Human: ${HumanScore} | CPU: ${cpuScore}`;
 }
 
 function resetBall() {
@@ -168,7 +168,7 @@ function update() {
 
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
-    playerY = e.clientY - rect.top - paddleHeight / 2;
+    HumanY = e.clientY - rect.top - paddleHeight / 2;
   });
 
   const cpuSpeed = 4;
@@ -204,23 +204,23 @@ function update() {
   }
 
   if (
-    (ballX < paddleWidth + ballSize / 2 && ballY > playerY && ballY < playerY + paddleHeight) ||
+    (ballX < paddleWidth + ballSize / 2 && ballY > HumanY && ballY < HumanY + paddleHeight) ||
     (ballX > canvas.width - paddleWidth - ballSize / 2 && ballY > cpuY && ballY < cpuY + paddleHeight)
   ) {
     ballSpeedX = -ballSpeedX;
-    const deltaY = ballY - (ballX < paddleWidth ? playerY : cpuY);
+    const deltaY = ballY - (ballX < paddleWidth ? HumanY : cpuY);
     ballSpeedY = deltaY * 0.3;
     createExplosion(ballX, ballY);
 
     if (ballX < paddleWidth + ballSize / 2) {
-      playerPaddleGlow = maxGlowIntensity;
+      HumanPaddleGlow = maxGlowIntensity;
       createExplosion(paddleWidth, ballY);
     } else {
       cpuPaddleGlow = maxGlowIntensity;
       createExplosion(canvas.width - paddleWidth, ballY);
     }
 
-    const hitPosition = (ballY - (ballX < paddleWidth ? playerY : cpuY)) / paddleHeight;
+    const hitPosition = (ballY - (ballX < paddleWidth ? HumanY : cpuY)) / paddleHeight;
     if (hitPosition < 0.33) {
       playSound(ballBounceLowSound);
     } else if (hitPosition < 0.66) {
@@ -239,7 +239,7 @@ function update() {
     playSound(cpuScoreSound);
     createExplosion(0, ballY);
   } else if (ballX > canvas.width) {
-    playerScore++;
+    HumanScore++;
     resetBall();
     playSound(scoreSound);
     playSound(pointScoredSound);
@@ -253,12 +253,12 @@ function update() {
 
   updateScore();
 
-  if (playerScore >= maxScore || cpuScore >= maxScore) {
+  if (HumanScore >= maxScore || cpuScore >= maxScore) {
     gameState = 'gameover';
     playSound(gameOverSound);
   }
 
-  playerPaddleGlow = Math.max(0, playerPaddleGlow - glowDecayRate);
+  HumanPaddleGlow = Math.max(0, HumanPaddleGlow - glowDecayRate);
   cpuPaddleGlow = Math.max(0, cpuPaddleGlow - glowDecayRate);
 }
 
@@ -317,9 +317,9 @@ function draw() {
     ctx.shadowColor = neonBlue;
     ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 100);
     ctx.font = '40px Arial';
-    ctx.fillText(playerScore > cpuScore ? 'Player Wins!' : 'CPU Wins!', canvas.width / 2, canvas.height / 2);
+    ctx.fillText(HumanScore > cpuScore ? 'Human Wins!' : 'CPU Wins!', canvas.width / 2, canvas.height / 2);
     ctx.font = '30px Arial';
-    ctx.fillText(`Final Score: ${playerScore} - ${cpuScore}`, canvas.width / 2, canvas.height / 2 + 50);
+    ctx.fillText(`Final Score: ${HumanScore} - ${cpuScore}`, canvas.width / 2, canvas.height / 2 + 50);
     ctx.shadowBlur = 0;
 
     const buttonWidth = 200;
@@ -350,7 +350,7 @@ function draw() {
 
     canvas.style.cursor = isHovered ? 'pointer' : 'default';
   } else {
-    drawRect(0, playerY, paddleWidth, paddleHeight, neonBlue, false, playerPaddleGlow);
+    drawRect(0, HumanY, paddleWidth, paddleHeight, neonBlue, false, HumanPaddleGlow);
     drawRect(canvas.width - paddleWidth, cpuY, paddleWidth, paddleHeight, neonBlue, false, cpuPaddleGlow);
 
     drawMotionBlur(lastBallX, lastBallY, ballX, ballY, ballSize / 2, neonBlue);
@@ -370,13 +370,13 @@ function draw() {
 }
 
 function resetGame() {
-  playerScore = 0;
+  HumanScore = 0;
   cpuScore = 0;
   maxScore = 5;
   resetBall();
   gameState = 'playing';
   gameStartTime = Date.now();
-  playerPaddleGlow = 0;
+  HumanPaddleGlow = 0;
   cpuPaddleGlow = 0;
 }
 
